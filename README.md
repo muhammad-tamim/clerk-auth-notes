@@ -11,6 +11,7 @@
   - [`<SignInButton />` + `<SignUpButton />` + `<SignOutButton />`](#signinbutton---signupbutton---signoutbutton-)
   - [`<show />`:](#show-)
   - [`<UserAvatar />` vs `<UserButton />` vs `<UserProfile />`:](#useravatar--vs-userbutton--vs-userprofile-)
+- [Themes Customization:](#themes-customization)
 
 # Setup: 
 1. Create a Clerk Application:
@@ -1034,3 +1035,58 @@ export default function UserProfilePage() {
 }
 ```
 
+
+
+# Themes Customization: 
+For that install the clerk ui:
+
+```
+npm install @clerk/ui
+```
+
+We can apply themes at different levels depending on needs: 
+- Across all Clerk components
+
+```tsx
+ import { dark } from '@clerk/ui/themes'
+
+ <ClerkProvider
+  appearance={{
+     theme: dark,
+   }}
+ >
+   {/* ... */}
+ </ClerkProvider>
+```
+
+- All instances of a Clerk component
+
+```tsx
+import { dark, neobrutalism } from '@clerk/ui/themes'
+
+<ClerkProvider
+  appearance={{
+    theme: dark,
+    signIn: { theme: neobrutalism },
+  }}
+>
+  {/* ... */}
+</ClerkProvider>
+```
+
+- A single Clerk component
+
+```tsx
+<SignIn
+  appearance={{
+    theme: dark,
+  }}
+```
+
+Note: Clerk provides six prebuilt themes:
+- The default theme
+- The "Simple" theme
+- The "shadcn" theme
+- The "Dark" theme
+- The "Shades of Purple" theme
+- The "Neobrutalism" theme
