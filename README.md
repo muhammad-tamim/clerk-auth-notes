@@ -5,7 +5,13 @@
   - [Protect routes:](#protect-routes)
     - [Authentication-based protection:](#authentication-based-protection)
     - [Authorization-based protection:](#authorization-based-protection)
-
+  - [Protect API Route:](#protect-api-route)
+  - [auth() + currentUser() vs useAuth() + useUser():](#auth--currentuser-vs-useauth--useuser)
+- [Components:](#components)
+  - [`<SignIn />` + `<SignUp />` :](#signin---signup--)
+  - [`<SignInButton />` + `<SignUpButton />` + `<SignOutButton />`](#signinbutton---signupbutton---signoutbutton-)
+  - [`<show />`:](#show-)
+  - [`<UserAvatar />` vs `<UserButton />` vs `<UserProfile />`:](#useravatar--vs-userbutton--vs-userprofile-)
 
 # Setup: 
 1. Create a Clerk Application:
@@ -231,6 +237,31 @@ export const config = {
 }
 ```
 
+or if we don't want to use middleware: 
+
+
+```tsx
+// app/page.tsx
+
+import { auth, currentUser } from '@clerk/nextjs/server'
+
+export default async function Page() {
+  // Use `auth()` to access `isAuthenticated` - if false, the user is not signed in
+  const { isAuthenticated } = await auth()
+
+  // Protect the route by checking if the user is signed in
+  if (!isAuthenticated) {
+    return <div>Sign in to view this page</div>
+  }
+
+  // Get the Backend User object when you need access to the user's information
+  const user = await currentUser()
+
+  // Use `user` to render user details or create UI elements
+  return <div>Welcome, {user.firstName}!</div>
+}
+```
+
 ### Authorization-based protection:
 **Note:** This is for learning purpose, but in real apps we won't use clerk based authorization.
 
@@ -418,4 +449,586 @@ export default async function AdminHomePage() {
 }
 ```
 
+## Protect API Route: 
+
+```tsx
+// app/api/user/route.ts
+
+import { NextResponse } from 'next/server'
+import { currentUser, auth } from '@clerk/nextjs/server'
+
+export async function GET() {
+  // Use `auth()` to access `isAuthenticated` - if false, the user is not signed in
+  const { isAuthenticated } = await auth()
+
+  // Protect the route by checking if the user is signed in
+  if (!isAuthenticated) {
+    return new NextResponse('Unauthorized', { status: 401 })
+  }
+
+  // Use `currentUser()` to get the Backend User object
+  const user = await currentUser()
+
+  // Add your Route Handler's logic with the returned `user` object
+
+  return NextResponse.json(
+    { userId: user.id, email: user.emailAddresses[0].emailAddress },
+    { status: 200 },
+  )
+}
+```
+
+Note: The Backend User object includes a privateMetadata field that should not be exposed to the frontend. Avoid passing the full user object returned by currentUser() to the frontend. Instead, pass only the specified fields you need.
+
+
+```tsx
+// src/app/api/admin/users/route.ts
+
+import { auth, currentUser } from "@clerk/nextjs/server"
+import { NextResponse } from "next/server"
+
+export async function GET() {
+  const { userId } = await auth()
+
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const user = await currentUser()
+
+  const role = user?.publicMetadata?.role
+
+  if (role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+
+  return NextResponse.json({
+    message: "Admin data",
+  })
+}
+```
+
+## auth() + currentUser() vs useAuth() + useUser():  
+- For server component use `auth()` and `currentUser()`
+- for client component use `useAuth()` and `useUser()`
+
+
+Note: 
+- Use auth() or useAuth() for auth related info like userId, sessionId etc
+- use currentUser() or useUser for user related info like email, photo, name etc.
+
+
+```tsx
+import { auth, currentUser } from '@clerk/nextjs/server'
+import React from 'react'
+
+export default async function Page() {
+
+    const authObj = await auth()
+    const userObj = await currentUser()
+
+    console.log("authObj", authObj)
+    console.log("userObj", userObj)
+
+    return (
+        <div>Server Component</div>
+    )
+}
+```
+
+
+```tsx
+export default function Example() {
+  const { isLoaded, isSignedIn, userId, sessionId, getToken } = useAuth()
+
+  const fetchExternalData = async () => {
+    // Use `getToken()` to get the current user's session token
+    const token = await getToken()
+
+    // Use `token` to fetch data from an external API
+    const response = await fetch('https://api.example.com/data', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+
+    return response.json()
+  }
+
+  // Use `isLoaded` to check if Clerk is loaded
+  if (!isLoaded) {
+    return <div>Loading...</div>
+  }
+
+  // Use `isSignedIn` to check if the user is signed in
+  if (!isSignedIn) {
+    // You could also add a redirect to the sign-in page here
+    return <div>Sign in to view this page</div>
+  }
+
+  return (
+    <div>
+      Hello, {userId}! Your current active session is {sessionId}.
+    </div>
+  )
+}
+```
+
+```tsx
+export default function Example() {
+  const { isLoaded, isSignedIn, userId, sessionId, getToken } = useAuth()
+
+  const fetchExternalData = async () => {
+    // Use `getToken()` to get the current user's session token
+    const token = await getToken()
+
+    // Use `token` to fetch data from an external API
+    const response = await fetch('https://api.example.com/data', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+
+    return response.json()
+  }
+
+  // Use `isLoaded` to check if Clerk is loaded
+  if (!isLoaded) {
+    return <div>Loading...</div>
+  }
+
+  // Use `isSignedIn` to check if the user is signed in
+  if (!isSignedIn) {
+    // You could also add a redirect to the sign-in page here
+    return <div>Sign in to view this page</div>
+  }
+
+  return (
+    <div>
+      Hello, {userId}! Your current active session is {sessionId}.
+    </div>
+  )
+}
+```
+
+# Components: 
+
+## `<SignIn />` + `<SignUp />` : 
+ If we want dedicated page then use `<SignIn />` + `<SignUp />`:
+
+```tsx
+// src/app/layout.tsx
+
+import type { Metadata } from 'next'
+import { ClerkProvider } from '@clerk/nextjs'
+import './globals.css'
+import Link from 'next/link'
+
+
+export const metadata: Metadata = {
+  title: 'Clerk Next.js Quickstart',
+  description: 'Generated by create next app',
+}
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
+  return (
+    <html lang="en">
+      <body>
+        <ClerkProvider>
+          <nav className="flex justify-end items-center p-4 gap-4 h-16">
+            <Link href={'/sign-in'} className='btn btn-primary'>Sign-in</Link>
+            <Link href={'/sign-up'} className='btn btn-primary btn-outline'>Sign-up</Link>
+          </nav>
+          {children}
+        </ClerkProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+```tsx
+// src/app/sign-in/[[...sign-in]]/page.tsx
+
+import { SignIn } from '@clerk/nextjs'
+
+export default function SignInPage() {
+    return <SignIn signUpUrl='sign-up' />
+}
+```
+
+```tsx
+// src/app/sign-up/[[...sign-up]]/page.tsx
+
+import { SignUp } from '@clerk/nextjs'
+
+export default function SignUpPage() {
+    return <SignUp signInUrl='/sign-in' />
+}
+```
+
+Note: if we don't add signInUrl and signUpUrl then if we press signin and signup within the component url, they navigate us their hosted pages.
+
+
+or we can use env variable for that: 
+
+```tsx
+// src/app/sign-in/[[...sign-in]]/page.tsx
+
+import { SignIn } from '@clerk/nextjs'
+
+export default function SignInPage() {
+    return <SignIn />
+}
+```
+
+```tsx
+// src/app/sign-up/[[...sign-up]]/page.tsx
+
+import { SignUp } from '@clerk/nextjs'
+
+export default function SignUpPage() {
+    return <SignUp />
+}
+```
+
+```
+.evn.local
+
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+
+<!-- optional -->
+NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/
+NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/
+```
+
+
+## `<SignInButton />` + `<SignUpButton />` + `<SignOutButton />`
+- If we don't want dedicated page the use `<SignInButton />` + `<SignUpButton />`: 
+
+```tsx
+// src/app/layout.tsx
+
+import type { Metadata } from 'next'
+import { ClerkProvider, SignInButton, SignUpButton, SignOutButton } from '@clerk/nextjs'
+import './globals.css'
+
+
+export const metadata: Metadata = {
+  title: 'Clerk Next.js Quickstart',
+  description: 'Generated by create next app',
+}
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
+  return (
+    <html lang="en">
+      <body>
+        <ClerkProvider>
+          <nav className="flex justify-end items-center p-4 gap-4 h-16">
+            <SignInButton></SignInButton>
+            <SignUpButton></SignUpButton>
+            <SignOutButton></SignOutButton>
+          </nav>
+          {children}
+        </ClerkProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+- for now if we click thats button we navigate to clerk hosted pages, but we want modal then: 
+
+```tsx
+// src/app/layout.tsx
+
+import type { Metadata } from 'next'
+import { ClerkProvider, SignInButton, SignUpButton } from '@clerk/nextjs'
+import './globals.css'
+
+
+export const metadata: Metadata = {
+  title: 'Clerk Next.js Quickstart',
+  description: 'Generated by create next app',
+}
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
+  return (
+    <html lang="en">
+      <body>
+        <ClerkProvider>
+          <nav className="flex justify-end items-center p-4 gap-4 h-16">
+            <SignInButton mode='modal'></SignInButton>
+            <SignUpButton mode='modal'></SignUpButton>
+            <SignUpButton></SignUpButton>
+            {/* mode='redirect' is default */}
+          </nav>
+          {children}
+        </ClerkProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+- For now our buttons have no style, if we want styles: 
+
+```tsx
+// src/app/layout.tsx
+
+import type { Metadata } from 'next'
+import { ClerkProvider, SignInButton, SignOutButton, SignUpButton } from '@clerk/nextjs'
+import './globals.css'
+
+
+export const metadata: Metadata = {
+  title: 'Clerk Next.js Quickstart',
+  description: 'Generated by create next app',
+}
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
+  return (
+    <html lang="en">
+      <body>
+        <ClerkProvider>
+          <nav className="flex justify-end items-center p-4 gap-4 h-16">
+            <SignInButton mode='modal'>
+              <button className='btn btn-primary'>Sign in</button>
+            </SignInButton>
+            <SignUpButton mode='modal'>
+              <button className='btn btn-primary btn-outline'>Sign up</button>
+            </SignUpButton>
+            <SignOutButton>
+              <button className='btn btn-error'>Sign out</button>
+            </SignOutButton>
+          </nav>
+          {children}
+        </ClerkProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+## `<show />`: 
+For conditional rendering: 
+
+```tsx
+// src/app/layout.tsx
+
+import type { Metadata } from 'next'
+import { ClerkProvider, Show, SignInButton, SignOutButton, SignUpButton } from '@clerk/nextjs'
+import './globals.css'
+
+
+export const metadata: Metadata = {
+  title: 'Clerk Next.js Quickstart',
+  description: 'Generated by create next app',
+}
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
+  return (
+    <html lang="en">
+      <body>
+        <ClerkProvider>
+          <nav className="flex justify-end items-center p-4 gap-4 h-16">
+
+            <Show when={'signed-out'}>
+              <SignInButton mode='modal'>
+                <button className='btn btn-primary'>Sign in</button>
+              </SignInButton>
+              <SignUpButton mode='modal'>
+                <button className='btn btn-primary btn-outline'>Sign up</button>
+              </SignUpButton>
+            </Show>
+
+            <Show when={'signed-in'}>
+              <SignOutButton>
+                <button className='btn btn-error'>Sign out</button>
+              </SignOutButton>
+            </Show>
+
+          </nav>
+          {children}
+        </ClerkProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+## `<UserAvatar />` vs `<UserButton />` vs `<UserProfile />`:
+
+- `<UserAvatar />`: if we want to show just user Avatar after signin: 
+
+```tsx
+// src/app/layout.tsx
+
+import type { Metadata } from 'next'
+import { ClerkProvider, Show, SignInButton, SignOutButton, SignUpButton, UserAvatar } from '@clerk/nextjs'
+import './globals.css'
+
+
+export const metadata: Metadata = {
+  title: 'Clerk Next.js Quickstart',
+  description: 'Generated by create next app',
+}
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
+  return (
+    <html lang="en">
+      <body>
+        <ClerkProvider>
+          <nav className="flex justify-end items-center p-4 gap-4 h-16">
+
+            <Show when={'signed-out'}>
+              <SignInButton></SignInButton>
+              <SignUpButton></SignUpButton>
+            </Show>
+
+            <Show when={'signed-in'}>
+              <SignOutButton></SignOutButton>
+              <UserAvatar></UserAvatar>
+            </Show>
+
+          </nav>
+          {children}
+        </ClerkProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+- `<UserButton />`: if we want to show the user profile avatar with manage account (profile, security) + signout button  
+
+```tsx
+// src/app/layout.tsx
+
+import type { Metadata } from 'next'
+import { ClerkProvider, Show, SignInButton, SignOutButton, SignUpButton, UserButton, UserProfile } from '@clerk/nextjs'
+import './globals.css'
+
+
+export const metadata: Metadata = {
+  title: 'Clerk Next.js Quickstart',
+  description: 'Generated by create next app',
+}
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
+  return (
+    <html lang="en">
+      <body>
+        <ClerkProvider>
+          <nav className="flex justify-end items-center p-4 gap-4 h-16">
+
+            <Show when={'signed-out'}>
+              <SignInButton></SignInButton>
+              <SignUpButton></SignUpButton>
+            </Show>
+
+            <Show when={'signed-in'}>
+              <UserButton></UserButton>
+            </Show>
+            
+          </nav>
+
+          {children}
+        </ClerkProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+- `<UserProfile />`: if we want to show the user profile same as `<UserButton />` component manage account (profile, security)  with separated page instead of modal within the `<UserButton />`: 
+  
+
+```tsx
+// src/app/layout.tsx
+
+import type { Metadata } from 'next'
+import { ClerkProvider, Show, SignInButton, SignOutButton, SignUpButton } from '@clerk/nextjs'
+import './globals.css'
+import Link from 'next/link'
+
+
+export const metadata: Metadata = {
+  title: 'Clerk Next.js Quickstart',
+  description: 'Generated by create next app',
+}
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
+  return (
+    <html lang="en">
+      <body>
+        <ClerkProvider>
+          <nav className="flex justify-end items-center p-4 gap-4 h-16">
+
+            <Show when={'signed-out'}>
+              <SignInButton></SignInButton>
+              <SignUpButton></SignUpButton>
+            </Show>
+
+            <Show when={'signed-in'}>
+              <SignOutButton></SignOutButton>
+              <Link href={'user-profile'}>User Profile</Link>
+            </Show>
+
+          </nav>
+
+          {children}
+        </ClerkProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+```tsx
+// src/app/user-profile/[[...user-profile]]/page.tsx
+
+import { UserProfile } from "@clerk/nextjs";
+
+export default function UserProfilePage() {
+    return (
+        <div className="flex justify-center">
+            <UserProfile />
+        </div>
+    )
+}
+```
 
