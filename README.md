@@ -5,7 +5,6 @@
   - [Protect routes:](#protect-routes)
     - [Authentication-based protection:](#authentication-based-protection)
     - [Authorization-based protection:](#authorization-based-protection)
-  - [Protect API Route:](#protect-api-route)
   - [auth() + currentUser() vs useAuth() + useUser():](#auth--currentuser-vs-useauth--useuser)
 - [Components:](#components)
   - [`<SignIn />` + `<SignUp />` :](#signin---signup--)
@@ -168,7 +167,7 @@ we can protect routes based on a user's authentication status by checking if the
 // src/proxy.ts
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
-const isProtectedRoute = createRouteMatcher(['/dashboard(.*)', '/forum(.*)'])
+const isProtectedRoute = createRouteMatcher(['/dashboard(.*)', '/forum(.*)', '/api(.*)])
 
 export default clerkMiddleware(async (auth, req) => {
   if (isProtectedRoute(req)) await auth.protect()
@@ -191,7 +190,7 @@ OR:
 //src/proxy.ts
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
-const isPublicRoute = createRouteMatcher(['/sign-in(.*)', '/sign-up(.*)'])
+const isPublicRoute = createRouteMatcher(['/sign-in(.*)', '/sign-up(.*)', '/api(.*)'])
 
 export default clerkMiddleware(async (auth, req) => {
   if (!isPublicRoute(req)) {
@@ -215,7 +214,7 @@ export const config = {
 // src/proxy.ts
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
-const isProtectedRoute = createRouteMatcher(['/dashboard(.*)', '/forum(.*)'])
+const isProtectedRoute = createRouteMatcher(['/dashboard(.*)', '/forum(.*)', '/api(.*)'])
 
 export default clerkMiddleware(async (auth, req) => {
   const { isAuthenticated, redirectToSignIn } = await auth()
@@ -237,7 +236,9 @@ export const config = {
 }
 ```
 
-or if we don't want to use middleware: 
+Or if we don't want to use middleware for protect routes: 
+
+**Note** not recommended, middleware is best choice
 
 
 ```tsx
@@ -261,6 +262,34 @@ export default async function Page() {
   return <div>Welcome, {user.firstName}!</div>
 }
 ```
+
+```tsx
+// app/api/user/route.ts
+
+import { NextResponse } from 'next/server'
+import { currentUser, auth } from '@clerk/nextjs/server'
+
+export async function GET() {
+  // Use `auth()` to access `isAuthenticated` - if false, the user is not signed in
+  const { isAuthenticated } = await auth()
+
+  // Protect the route by checking if the user is signed in
+  if (!isAuthenticated) {
+    return new NextResponse('Unauthorized', { status: 401 })
+  }
+
+  // Use `currentUser()` to get the Backend User object
+  const user = await currentUser()
+
+  // Add your Route Handler's logic with the returned `user` object
+
+  return NextResponse.json(
+    { userId: user.id, email: user.emailAddresses[0].emailAddress },
+    { status: 200 },
+  )
+}
+```
+
 
 ### Authorization-based protection:
 **Note:** This is for learning purpose, but in real apps we won't use clerk based authorization.
@@ -295,7 +324,7 @@ declare global {
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse } from "next/server"
 
-const isProtectedRoute = createRouteMatcher(['/admin(.*)', '/seller(.*)'])
+const isProtectedRoute = createRouteMatcher(['/admin(.*)', '/seller(.*)', '/api(.*)'])
 
 const isAdminRoute = createRouteMatcher(["/admin(.*)"])
 const isSellerRoute = createRouteMatcher(["/seller(.*)"])
@@ -449,37 +478,9 @@ export default async function AdminHomePage() {
 }
 ```
 
-## Protect API Route: 
+Or if we don't want to use middleware for protect routes: 
 
-```tsx
-// app/api/user/route.ts
-
-import { NextResponse } from 'next/server'
-import { currentUser, auth } from '@clerk/nextjs/server'
-
-export async function GET() {
-  // Use `auth()` to access `isAuthenticated` - if false, the user is not signed in
-  const { isAuthenticated } = await auth()
-
-  // Protect the route by checking if the user is signed in
-  if (!isAuthenticated) {
-    return new NextResponse('Unauthorized', { status: 401 })
-  }
-
-  // Use `currentUser()` to get the Backend User object
-  const user = await currentUser()
-
-  // Add your Route Handler's logic with the returned `user` object
-
-  return NextResponse.json(
-    { userId: user.id, email: user.emailAddresses[0].emailAddress },
-    { status: 200 },
-  )
-}
-```
-
-Note: The Backend User object includes a privateMetadata field that should not be exposed to the frontend. Avoid passing the full user object returned by currentUser() to the frontend. Instead, pass only the specified fields you need.
-
+**Note** not recommended, middleware is best choice
 
 ```tsx
 // src/app/api/admin/users/route.ts
@@ -507,6 +508,7 @@ export async function GET() {
   })
 }
 ```
+
 
 ## auth() + currentUser() vs useAuth() + useUser():  
 - For server component use `auth()` and `currentUser()`
